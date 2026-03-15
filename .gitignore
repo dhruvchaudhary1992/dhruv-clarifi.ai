@@ -1,0 +1,16 @@
+# Dependencies
+clarifi-frontend/node_modules/
+
+# Build output
+clarifi-frontend/dist/
+
+# Environment files (never commit secrets)
+clarifi-frontend/.env
+clarifi-frontend/.env.local
+clarifi-frontend/.env.*.local
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+*.log

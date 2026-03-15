@@ -1,0 +1,902 @@
+{
+  "name": "Clarifi Agent v6",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        112,
+        1824
+      ],
+      "id": "04f85465-ab6d-44d4-aac2-5bb85adfc512",
+      "name": "Embeddings OpenAI1",
+      "credentials": {
+        "openAiApi": {
+          "id": "OzumL2VeUyr7a1IN",
+          "name": "OpenAi account 14"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Tool for IRDAI 2024 rules: 1-hour cashless, 3-hour discharge, 60-month moratorium, and 36-month PED caps..",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "health-insurance-knowledge",
+          "mode": "list",
+          "cachedResultName": "health-insurance-knowledge"
+        },
+        "topK": 6,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        -16,
+        1616
+      ],
+      "id": "61c7bbae-d102-4e12-8604-9898ec1673cc",
+      "name": "legal_rights_lookup",
+      "credentials": {
+        "pineconeApi": {
+          "id": "W6YNzs2baC43VIG4",
+          "name": "PineconeApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "description": "Retrieves financial benchmarks for surgeries. Input: Use ONLY the official 'MedicalTerm' retrieved from the surgery_thesaurus_lookup. If the city is missing, use 'Mumbai' as the default. Output: Estimated market cost in INR.",
+        "jsCode": "// =====================================================\n// COST ESTIMATORY TOOL — FULLY REVISED (PRODUCTION SAFE)\n// =====================================================\n\n\n// ===============================\n// 1. PROCEDURE DATASET\n// ===============================\nconst procedures = [\n  { \"name\": \"Hemorrhoidectomy\", \"aliases\": [\"piles\",\"hemorrhoid\",\"fissure\",\"fistula\",\"anal surgery\"], \"t1\": 65000, \"t2\": 52000, \"t3\": 39000, \"rsi\": 300000 },\n  { \"name\": \"Coronary Artery Bypass Grafting (CABG)\", \"aliases\": [\"cabg\",\"heart bypass\",\"bypass surgery\",\"heart block\",\"open heart\"], \"t1\": 570000, \"t2\": 456000, \"t3\": 342000, \"rsi\": 1000000 },\n\n  {\n    \"name\": \"Total Knee Replacement\",\n    \"aliases\": [\n      \"knee surgery\",\n      \"knee replacement\",\n      \"tkr\",\n      \"knee joint\",\n      \"arthritis surgery\",\n      \"total knee arthroplasty\"\n    ],\n    \"t1\": 285000,\n    \"t2\": 228000,\n    \"t3\": 171000,\n    \"rsi\": 500000\n  },\n\n  { \"name\": \"Cataract Surgery\", \"aliases\": [\"eye surgery\",\"cataract\",\"lens replacement\",\"motibindu\",\"phaco\"], \"t1\": 57000, \"t2\": 45600, \"t3\": 34200, \"rsi\": 100000 },\n  { \"name\": \"Appendectomy\", \"aliases\": [\"appendix\",\"appendicitis\",\"appendix removal\"], \"t1\": 68400, \"t2\": 54720, \"t3\": 41040, \"rsi\": 100000 },\n  { \"name\": \"Angioplasty\", \"aliases\": [\"stent\",\"heart stent\",\"ptca\",\"angio\"], \"t1\": 228000, \"t2\": 182400, \"t3\": 136800, \"rsi\": 300000 },\n  { \"name\": \"Hysterectomy\", \"aliases\": [\"uterus removal\",\"uterus surgery\",\"womb removal\"], \"t1\": 114000, \"t2\": 91200, \"t3\": 68400, \"rsi\": 200000 },\n  { \"name\": \"Total Hip Replacement\", \"aliases\": [\"hip replacement\",\"hip surgery\",\"thr\",\"hip joint\"], \"t1\": 342000, \"t2\": 273600, \"t3\": 205200, \"rsi\": 500000 },\n  { \"name\": \"Hernia Repair\", \"aliases\": [\"hernia\",\"hydrocele\",\"mesh surgery\",\"hernioplasty\"], \"t1\": 57000, \"t2\": 45600, \"t3\": 34200, \"rsi\": 100000 },\n\n  {\n    \"name\": \"Cholecystectomy (Gallbladder Removal)\",\n    \"aliases\": [\"gallbladder\",\"gall bladder\",\"gall bladder removal\",\"gallbladder removal\",\"gall stone\",\"gb stone\",\"cholecystectomy\"],\n    \"t1\": 91200, \"t2\": 72960, \"t3\": 54720, \"rsi\": 100000\n  },\n\n  { \"name\": \"Prostatectomy\", \"aliases\": [\"prostate\",\"prostrate\",\"bph\",\"urology surgery\"], \"t1\": 171000, \"t2\": 136800, \"t3\": 102600, \"rsi\": 200000 },\n  { \"name\": \"Cesarean Section\", \"aliases\": [\"c-section\",\"c section\",\"delivery surgery\",\"lscs\"], \"t1\": 114000, \"t2\": 91200, \"t3\": 68400, \"rsi\": 200000 },\n  { \"name\": \"Kidney Stone Removal\", \"aliases\": [\"kidney stone\",\"rirs\",\"lithotripsy\",\"pcnl\",\"stone removal\"], \"t1\": 79800, \"t2\": 63840, \"t3\": 47880, \"rsi\": 100000 },\n  { \"name\": \"Liver Transplant\", \"aliases\": [\"liver transplant\",\"liver donor\",\"liver failure\"], \"t1\": 2850000, \"t2\": 2280000, \"t3\": 1710000, \"rsi\": 3000000 },\n  { \"name\": \"Kidney Transplant\", \"aliases\": [\"kidney transplant\",\"renal transplant\",\"kidney failure\"], \"t1\": 1140000, \"t2\": 912000, \"t3\": 684000, \"rsi\": 1500000 },\n  { \"name\": \"Heart Valve Replacement\", \"aliases\": [\"valve surgery\",\"heart valve\",\"mitral valve\",\"avr\",\"mvr\"], \"t1\": 570000, \"t2\": 456000, \"t3\": 342000, \"rsi\": 1000000 },\n  { \"name\": \"Spinal Fusion\", \"aliases\": [\"spine surgery\",\"back surgery\",\"slip disc\",\"spinal fusion\",\"vertebra\"], \"t1\": 456000, \"t2\": 364800, \"t3\": 273600, \"rsi\": 500000 },\n  { \"name\": \"Mastectomy\", \"aliases\": [\"breast removal\",\"breast surgery\",\"mastectomy\",\"breast cancer surgery\"], \"t1\": 228000, \"t2\": 182400, \"t3\": 136800, \"rsi\": 300000 },\n  { \"name\": \"Thyroidectomy\", \"aliases\": [\"thyroid surgery\",\"thyroid removal\",\"goitre\"], \"t1\": 91200, \"t2\": 72960, \"t3\": 54720, \"rsi\": 100000 },\n  { \"name\": \"Tonsillectomy\", \"aliases\": [\"tonsils\",\"tonsil removal\",\"throat surgery\"], \"t1\": 45600, \"t2\": 36480, \"t3\": 27360, \"rsi\": 100000 },\n  { \"name\": \"Brain Tumor Surgery\", \"aliases\": [\"brain surgery\",\"brain tumor\",\"craniotomy\",\"head surgery\"], \"t1\": 570000, \"t2\": 456000, \"t3\": 342000, \"rsi\": 1000000 }\n];\n\nconst tier1 = ['mumbai','delhi','bangalore','bengaluru','chennai','hyderabad','kolkata','pune','ahmedabad'];\nconst tier2 = ['jaipur','lucknow','surat','nagpur','chandigarh','coimbatore','indore','kochi','patna'];\n\n\n// ===============================\n// 2. INPUT HANDLING (ROBUST)\n// ===============================\nlet rawInput = \"\";\n\nif (typeof query === \"object\" && query !== null) {\n  rawInput = query.input || JSON.stringify(query);\n} else if (typeof query === \"string\") {\n  rawInput = query;\n}\n\nrawInput = rawInput.toLowerCase().trim();\n\nlet procedureStr = \"\";\nlet cityName = \"\";\n\n// JSON format\nif (rawInput.startsWith(\"{\")) {\n  try {\n    const parsed = JSON.parse(rawInput);\n    procedureStr = (parsed.procedure || \"\").toLowerCase();\n    cityName = (parsed.city || \"\").toLowerCase();\n  } catch {\n    procedureStr = rawInput;\n  }\n}\n\n// Key-value format (supports = and :)\nelse if (rawInput.includes(\"procedure\") && rawInput.includes(\"city\")) {\n  const parts = rawInput.split(\";\");\n  parts.forEach(part => {\n    if (part.includes(\"procedure\")) {\n      procedureStr = part.split(/[:=]/)[1]?.trim() || \"\";\n    }\n    if (part.includes(\"city\")) {\n      cityName = part.split(/[:=]/)[1]?.trim() || \"\";\n    }\n  });\n}\n\n// Semicolon format → \"Procedure;City\"\nelse if (rawInput.includes(\";\")) {\n  const parts = rawInput.split(\";\");\n  procedureStr = parts[0].trim();\n  cityName = parts[1] ? parts[1].trim() : \"\";\n}\n\n// Comma format → \"Procedure,City\"\nelse if (rawInput.includes(\",\")) {\n  const parts = rawInput.split(\",\");\n  procedureStr = parts[0].trim();\n  cityName = parts[1] ? parts[1].trim() : \"\";\n}\n\n// Only procedure\nelse {\n  procedureStr = rawInput;\n}\n\n\n// ===============================\n// 3. MATCH PROCEDURE\n// ===============================\nconst normalizedProcedure = procedureStr.replace(/\\s+/g,\"\");\n\nconst match = procedures.find(p =>\n  normalizedProcedure.includes(p.name.toLowerCase().replace(/\\s+/g,\"\")) ||\n  p.aliases.some(alias =>\n    normalizedProcedure.includes(alias.toLowerCase().replace(/\\s+/g,\"\"))\n  )\n);\n\nif (!match) {\n  return `COST ERROR: Procedure not recognized in query: \"${procedureStr}\".`;\n}\n\n\n// ===============================\n// 4. CITY TIER DETECTION\n// ===============================\nlet cost;\nlet cityInfo;\n\nif (tier1.includes(cityName)) {\n  cost = match.t1;\n  cityInfo = cityName.charAt(0).toUpperCase() + cityName.slice(1);\n}\nelse if (tier2.includes(cityName)) {\n  cost = match.t2;\n  cityInfo = cityName.charAt(0).toUpperCase() + cityName.slice(1);\n}\nelse {\n  cost = match.t1;\n  cityInfo = cityName ? cityName.charAt(0).toUpperCase() + cityName.slice(1) : \"Mumbai (Default)\";\n}\n\n\n// ===============================\n// 5. RETURN OUTPUT\n// ===============================\nreturn `RESULTS FOR ${match.name.toUpperCase()}: Market Estimated Cost is ₹${cost.toLocaleString('en-IN')} (based on ${cityInfo}). The recommended Sum Insured for this procedure is ₹${match.rsi.toLocaleString('en-IN')}.`;"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        -560,
+        1680
+      ],
+      "id": "46cd5526-c130-4883-930b-de0467d088a3",
+      "name": "cost_estimatory",
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "description": "Calculates BMI. Input: weight (kg) and height (m). Returns BMI and Category.",
+        "jsCode": "// 1. Hunt for numbers in the input\nconst input = typeof query === 'string' ? query : JSON.stringify(query);\nconst numbers = input.match(/\\d+(\\.\\d+)?/g);\n\nif (!numbers || numbers.length < 2) {\n  return \"ERROR: Please provide weight (kg) and height (m) as numbers (e.g., 85, 1.75).\";\n}\n\nconst weight = parseFloat(numbers[0]);\nconst height = parseFloat(numbers[1]);\nconst bmi = weight / (height * height);\nconst cat = (bmi < 18.5) ? \"Underweight\" : (bmi < 25) ? \"Normal\" : (bmi < 30) ? \"Overweight\" : \"Obese\";\n\n// 2. PROFESSIONAL STRING RETURN (Matching your working cost_estimator)\nreturn `BMI RESULTS: The calculated BMI is ${bmi.toFixed(2)}, which falls into the ${cat} category. (Data used: ${weight}kg, ${height}m).`;"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        -96,
+        1376
+      ],
+      "id": "0662ae77-b491-407b-a346-ba418f665ed1",
+      "name": "bmi_calculator"
+    },
+    {
+      "parameters": {
+        "description": "Search the user's insurance policy for coverage details. The input will be a combined term like 'Cataract (Phacoemulsification)'. Use both words to find the Sum Insured, Waiting Periods, and specific sub-limits. This tool is essential for the Financial Table.",
+        "jsCode": "// 1. Capture input properly from n8n tool\nconst searchTerm = (query || \"\").toLowerCase().trim();\n\n// 2. Medical Mapping\nconst medicalMapping = {\n  \"piles\": \"Hemorrhoidectomy\",\n  \"fissure\": \"Sphincterotomy\",\n  \"fistula\": \"Fistulectomy\",\n  \"kidney stone\": \"Lithotripsy\",\n  \"cataract\": \"Phacoemulsification\",\n  \"hernia\": \"Hernioplasty\",\n  \"appendix\": \"Appendectomy\",\n  \"gallbladder\": \"Cholecystectomy\",\n  \"knee replacement\": \"Total Knee Arthroplasty\",\n  \"joint replacement\": \"Total Knee Arthroplasty\"\n};\n\nlet foundTechnicalTerm = null;\nlet foundCommonTerm = null;\n\n// 3. Search for the match\nfor (const [userTerm, medicalTerm] of Object.entries(medicalMapping)) {\n  if (searchTerm.includes(userTerm)) {\n    foundTechnicalTerm = medicalTerm;\n    // Capitalizes the matched common term (e.g., 'cataract' -> 'Cataract')\n    foundCommonTerm = userTerm.charAt(0).toUpperCase() + userTerm.slice(1);\n    break;\n  }\n}\n\n// 4. THE STRING RETURN (Structured for the Agent)\nif (foundTechnicalTerm) {\n  // Returns a single string with the necessary data\n  return `Formal Term: ${foundTechnicalTerm}`;\n}\n// Already formal\nelse if (Object.values(medicalMapping).map(v => v.toLowerCase()).includes(searchTerm)) {\n  return `Formal Term: ${searchTerm}`;\n}\n// Fallback\nelse {\n  return `Formal Term: ${searchTerm}`;\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        -208,
+        1616
+      ],
+      "id": "c9b20e5a-fdcd-4830-8797-b48f593595ec",
+      "name": "thesaurus_lookup"
+    },
+    {
+      "parameters": {
+        "description": "Estimates surgical risk based on BMI category and surgery type. Input: BMI category and medical term.",
+        "jsCode": "// 1. ROBUST INPUT HANDLING\nlet bmiCategory = \"\";\nlet procedure = \"\";\n\n// If agent passed structured object\nif (typeof query === 'object' && query !== null) {\n    bmiCategory = (query.bmi_category || \"\").toLowerCase();\n    procedure = (query.procedure || \"\").toLowerCase();\n}\n// If agent passed string (fallback safety)\nelse if (typeof query === 'string') {\n    const input = query.toLowerCase();\n    bmiCategory = input;\n    procedure = input;\n}\n\n// 2. DEFAULT RISK\nlet riskLevel = \"Low\";\nlet advice = \"Standard pre-op protocols apply.\";\n\n// 3. BMI-BASED RISK\nif (bmiCategory.includes(\"obese\")) {\n    riskLevel = \"High\";\n    advice = \"Elevated perioperative risk due to obesity. Full cardiac and respiratory evaluation required.\";\n}\nelse if (bmiCategory.includes(\"overweight\")) {\n    riskLevel = \"Moderate\";\n    advice = \"Monitor respiratory and cardiac vitals due to elevated BMI.\";\n}\n\n// 4. PROCEDURE COMPLEXITY OVERRIDE\nconst highRiskProcedures = [\n    \"arthroplasty\",\n    \"cholecystectomy\",\n    \"cabg\",\n    \"bypass\",\n    \"transplant\",\n    \"brain tumor surgery\",\n    \"spinal fusion\",\n    \"heart valve replacement\"\n];\n\nif (highRiskProcedures.some(p => procedure.includes(p))) {\n    riskLevel = \"High\";\n    advice = \"Major surgical procedure. Inpatient care recommended; verify ICU availability.\";\n}\n\n// 5. RETURN STRING (Required by n8n tool contract)\nreturn `RISK ASSESSMENT: The estimated surgical risk is ${riskLevel}. Recommendation: ${advice}`;"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        -400,
+        1632
+      ],
+      "id": "f6d2dfb9-9b83-4b74-8ada-caecfb7233e0",
+      "name": "risk_estimator"
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Search the user's insurance policy documents. SEARCH TIP: If the procedure is 'Cataract (Phacoemulsification)', focus the search on the keyword 'Cataract' to find sub-limits, waiting periods, and sum insured details. Return the exact policy text found.\"",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "health-insurance-knowledge",
+          "mode": "list",
+          "cachedResultName": "health-insurance-knowledge"
+        },
+        "topK": 20,
+        "options": {
+          "pineconeNamespace": "={{ \"user_\" + $fromAI(\"user_email\", \"The email address provided by the user\") }}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        48,
+        1088
+      ],
+      "id": "24e73682-c902-45e0-8cee-1f767610c1a0",
+      "name": "user_policy_reader",
+      "credentials": {
+        "pineconeApi": {
+          "id": "W6YNzs2baC43VIG4",
+          "name": "PineconeApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        272,
+        1328
+      ],
+      "id": "8a933133-0e9a-4d43-b92f-b198eb2cca6e",
+      "name": "Embeddings OpenAI2",
+      "credentials": {
+        "openAiApi": {
+          "id": "OzumL2VeUyr7a1IN",
+          "name": "OpenAi account 14"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// items[0] = webhook form fields, items[1] = extracted PDF text\nconst raw = items[0].json;\nconst formData = raw.body ?? raw;   // multipart fields land in .body or root\nconst pdfData = items[1].json;\n\nreturn [\n  {\n    json: {\n      full_name:          formData.full_name          ?? null,\n      email:              formData.email              ?? null,\n      city:               formData.city               ?? null,\n      weight:             formData.weight             ?? null,\n      height:             formData.height             ?? null,\n      planned_procedure:  formData.planned_procedure  ?? null,\n      hospital_name:      formData.hospital_name      ?? null,\n      policy_text:        pdfData.text                ?? null\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1840,
+        1440
+      ],
+      "id": "3a9c4a4f-b53d-4e13-ae42-7c980cc294af",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "health-insurance-knowledge",
+          "mode": "list",
+          "cachedResultName": "health-insurance-knowledge"
+        },
+        "options": {
+          "clearNamespace": true,
+          "pineconeNamespace": "=user_{{ $json.email }}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        -1600,
+        1440
+      ],
+      "id": "f74eff61-b807-4789-87c8-0cc03b6964f2",
+      "name": "Pinecone Vector Store",
+      "credentials": {
+        "pineconeApi": {
+          "id": "W6YNzs2baC43VIG4",
+          "name": "PineconeApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "Policy_Document0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -2224,
+        1440
+      ],
+      "id": "ed035fb1-8128-4895-97d7-3c0566e309d4",
+      "name": "Extract from File2",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -1696,
+        1664
+      ],
+      "id": "ab1d7db1-9821-443b-b3da-179bd544dfa2",
+      "name": "Embeddings OpenAI3",
+      "credentials": {
+        "openAiApi": {
+          "id": "OzumL2VeUyr7a1IN",
+          "name": "OpenAi account 14"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonMode": "expressionData",
+        "jsonData": "={{ $json.policy_text }}",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "email",
+                "value": "={{ $json.email }}"
+              },
+              {
+                "name": "full_name",
+                "value": "={{ $json.full_name }}"
+              },
+              {
+                "name": "city",
+                "value": "={{ $json.city }}"
+              },
+              {
+                "name": "weight",
+                "value": "={{ $json.weight }}"
+              },
+              {
+                "name": "height",
+                "value": "={{ $json.height }}"
+              },
+              {
+                "name": "planned_procedure",
+                "value": "={{ $json.planned_procedure }}"
+              },
+              {
+                "name": "hospital_name",
+                "value": "={{ $json.hospital_name }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        -1456,
+        1648
+      ],
+      "id": "64165db8-64cf-4c01-9c7e-e4dc2a12d43f",
+      "name": "Default Data Loader1"
+    },
+    {
+      "parameters": {
+        "chunkOverlap": 200,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        -1328,
+        1888
+      ],
+      "id": "5da8c3c1-97ac-44e1-a0b8-f1d4a278bccf",
+      "name": "Recursive Character Text Splitter1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sentinel-audit",
+        "responseMode": "responseNode",
+        "options": {
+          "binaryPropertyName": "Policy_Document"
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2544,
+        1216
+      ],
+      "id": "e53fc33c-09c9-4748-b869-13df40641083",
+      "name": "Sentinel: AI Surgical Audit Portal",
+      "webhookId": "748602bb-04d7-4fee-8bab-81017fdc3c4e"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=User details:\nEmail -{{ $json.email }}\nHeight- {{ $json.height }}\nWeight -{{ $json.weight }}\nCity -{{ $json.city }}\nPlanned Procedure -{{ $json.planned_procedure }}\nHospital Name - {{ $json.hospital_name }}\n\nRun full surgical audit using available inputs.\nOnly call tools when required inputs exist.",
+        "options": {
+          "systemMessage": "ROLE\n\nYou are an autonomous Sentinel Insurance Auditor.\nYou orchestrate technical tools to perform structured surgical insurance audits.\n\nYou possess NO internal knowledge.\nYou must rely exclusively on tool outputs.\n\nYou may synthesize conclusions only from explicit tool results.\n\nYou must never fabricate, assume, infer, or guess missing information.\n\n🔒 CORE OPERATIONAL RULES\n1️⃣ TOOL-FIRST POLICY\n\nYou MUST call relevant tools to obtain required data.\n\nYou MUST NOT generate conclusions from internal knowledge.\n\nYou MUST NOT infer missing data.\n\nYou MUST NOT fabricate values.\n\nYou may synthesize conclusions only after all required tools have executed.\n\n2️⃣ STRICT INPUT VALIDATION (Loop Prevention)\n\nBefore calling ANY tool:\n\nVerify all required parameters exist.\n\nVerify required parameters are non-null.\n\nIf required parameters are missing → DO NOT call that tool.\n\nNever retry a tool call with identical missing parameters.\n\nNever attempt self-correction loops.\n\nNever repeatedly call the same tool with identical inputs.\n\nIf no tools can be executed due to missing inputs:\nReturn a structured explanation listing missing parameters.\n\n3️⃣ CONDITIONAL TOOL EXECUTION\n\nCall ONLY tools required by the request.\n\nSkip tools whose required inputs are unavailable.\n\nNever call unnecessary tools.\n\nNever call tools out of logical order.\n\n4️⃣ MULTI-TASK COMPLETENESS RULE\n\nIf multiple tasks are requested (cost, risk, hospital validation, legal review):\n\nYou MUST:\n\nExecute ALL required tools.\n\nComplete all tasks.\n\nNot stop after partial execution.\n\nNot produce final output until every relevant tool has returned results.\n\n5️⃣ STRICT PARAMETER DISCIPLINE\n\nWhen calling tools:\n\nPass structured parameters exactly as defined.\n\nNever pass combined free-form strings unless required.\n\nNever modify tool schema.\n\nNever fabricate fallback values except where explicitly allowed.\n\n🔄 EXECUTION LOGIC (Deterministic Order)\n1️⃣ Procedure Normalization\n\nIf a procedure exists:\n\nCall thesaurus_lookup.\n\nExtract formal medical term.\n\nUse ONLY the formal term downstream.\n\nNever reuse informal wording.\n\nIf no procedure → skip.\n\n2️⃣ BMI Handling\n\nCall bmi_calculator ONLY if:\n\nheight exists\n\nweight exists\n\nIf either missing → skip BMI.\nNever estimate.\n\nStore BMI category only if returned.\n\n3️⃣ Surgical Risk Assessment\n\nCall risk_estimator ONLY if normalized procedure exists.\n\nPass:\n\n\"procedure\" → normalized term\n\n\"bmi_category\" → only if available\n\nNever generate risk conclusions without tool output.\n\n4️⃣ Cost Estimation\n\nIf cost estimation requested:\n\nCall cost_estimatory.\n\nPass:\n\n\"procedure\" → normalized term\n\n\"city\" → user city\n\nIf city missing:\nPass \"Mumbai\" (allowed fallback).\n\n5️⃣ Policy Retrieval\n\nIf email exists:\n\nCall user_policy_reader.\n\nPass:\n\n\"email\" exactly as provided.\n\nNever modify email.\nNever construct namespace manually.\n\nExtract:\n\nInsurance company name\n\nPolicy status\n\nCoverage\n\nWaiting periods\n\nPED clause\n\nIf email missing:\nSkip and clearly state email required.\n\nNever fabricate policy data.\n\n🔁 INSURER NAME NORMALIZATION RULE (CRITICAL)\n\nBefore calling network_hospital_lookup:\n\nThe insurer name extracted from the policy may contain legal entity suffixes such as:\n\n\"Health Insurance Company Limited\"\n\n\"General Insurance Company Limited\"\n\n\"Insurance Company Limited\"\n\n\"Company Limited\"\n\n\"Limited\"\n\n\"Ltd.\"\n\nYou MUST remove legal suffix phrases and retain only the brand name.\n\nExamples:\n\n\"Max Bupa Health Insurance Company Limited\" → \"Max Bupa\"\n\n\"HDFC ERGO General Insurance Company Limited\" → \"HDFC Ergo\"\n\n\"Bajaj Allianz General Insurance Company Limited\" → \"Bajaj Allianz\"\n\nUse ONLY the normalized brand name when passing:\n\n\"insurance_provider\" → network_hospital_lookup\n\nThis is standardization, not fabrication.\n\n6️⃣ Hospital Network Validation\n\nCall network_hospital_lookup ONLY if:\n\nhospital_name exists\n\ninsurer name has been retrieved from policy\n\nExecution Order:\n\nRetrieve insurer\n\nNormalize insurer name\n\nCall network_hospital_lookup\n\nPass:\n\n\"hospital_name\"\n\n\"insurance_provider\" → normalized brand name\n\nInterpretation Rule:\n\n≥1 row returned → Hospital = Network\n\n0 rows returned → Hospital = Non-Network\n\nNever assume status without tool output.\n\nRECOMMENDATION ADAPTATION RULE (CRITICAL)\n\nWhen generating Section 7️⃣ Recommended Next Steps:\n\nYou MUST strictly align recommendations with the determined hospital network classification.\n\nIf Hospital = Network:\n\nDo NOT recommend verifying network eligibility.\n\nDo NOT recommend reconfirming network status.\n\nRecommend proceeding with cashless pre-authorization and required documentation.\n\nIf Hospital = Non-Network:\n\nRecommend reimbursement preparation.\n\nRecommend reviewing non-network cost exposure.\n\nRecommend confirming reimbursement documentation requirements.\n\nIf Hospital status is unavailable:\n\nRecommend confirming hospital network eligibility before proceeding.\n\nRecommendations must never contradict the determined network classification.\n\n7️⃣ Claim Process Branching\n\nCall claim_process_search ONLY AFTER network status is determined.\n\nIf Hospital = Network:\n\nSearch ONLY:\n\"preauthorization or cashless claim process for [Normalized Insurance Provider Name]\"\n\nIf Hospital = Non-Network:\n\nSearch ONLY:\n\"reimbursement claim documents required for non-network hospital for [Normalized Insurance Provider Name]\"\n\nNever combine both.\nNever call before network determination.\n\n8️⃣ Legal & Regulatory Retrieval\n\nIf IRDAI, moratorium, PED caps, discharge timelines, or cashless rules are mentioned:\n\nCall legal_rights_lookup.\n\nConstruct precise regulatory query with specific keywords.\n\nNever use vague phrases.\n\nOnly synthesize from retrieved content.\nIf no clause found → explicitly state regulatory confirmation unavailable.\n\nNever fabricate regulatory language.\n\n📌 FINAL OUTPUT FORMAT (MANDATORY)\n\nAfter ALL relevant tools execute:\n\nYou MUST produce a clean, professional, user-facing report.\n\nYou MUST NOT:\n\nMention tool names\n\nMention execution steps\n\nMention normalization logic\n\nReveal system reasoning\n\nReference “retrieved text”, “tool output”, or document extraction mechanics\n\nMention benchmarking methods, internal calculations, or data sources\n\nUse phrases such as:\n\n“explicitly stated”\n\n“as per tool”\n\n“normalized to”\n\n“from search results”\n\n“market estimate”\n\n“based on internal calculation”\n\nReturn ONLY the final report.\n\nSURGICAL INSURANCE AUDIT REPORT\n1️⃣ Policy Overview\n\nInsurer:\n\nPolicy Status:\n\nCoverage: (Summarize key covered items only — maximum 3 concise bullets.)\n\nWaiting Period:\n\nPre-Existing Disease Clause: (Quote verbatim only if available.)\n\nIf policy status is unavailable, write exactly:\n“Policy status not available in retrieved extract. Confirmation recommended.”\n\nDo NOT explain document limitations.\n\n2️⃣ Hospital Network Status\n\nHospital Name:\n\nNetwork Classification: (Network / Non-Network)\n\nZone: (if available)\n\nDo not explain lookup logic or matching behavior.\n\n3️⃣ Estimated Cost\n\nCity:\n\nEstimated Cost Range:\n\nRecommended Sum Insured: (if available)\n\nDo NOT:\n\nAdd commentary such as “market estimate”\n\nExplain benchmarking logic\n\nMention normalization or cost model mechanics\n\n4️⃣ Clinical Risk Assessment\n\nProcedure:\n\nBMI Category:\n\nRisk Level:\n\nKey Consideration: (Maximum 1 concise sentence, clear and authoritative.)\n\nDo not mention calculation steps or internal scoring logic.\n\n5️⃣ Claim Process Guidance\n\nClearly state:\n\nClaim Mode: (Cashless / Reimbursement)\n\nKey Documents Required: (List only core documents.)\n\nProcess Summary: (Maximum 3 short bullets.)\n\nExpected Timeline: (If available.)\n\nDo not describe branching logic or search behavior.\n\n6️⃣ Regulatory Safeguards\n\nSource:\n\nExact Clause: (Quote verbatim only if retrieved. Present in a single clean paragraph without internal bullet formatting.)\n\nPractical Meaning: (Maximum 2 concise sentences.)\n\nIf no clause retrieved, write exactly:\n“No direct regulatory clause retrieved.”\n\nDo not paraphrase regulatory clauses unless explicitly instructed.\nDo not invent regulatory language.\n\n7️⃣ Recommended Next Steps\n\nProvide exactly 3 concise, actionable steps.\n\nEach step must be one line only.\n\nNo sub-bullets.\nNo expansion.\nNo explanatory commentary.\n\n✂️ OUTPUT CONCISENESS RULES (MANDATORY)\n\nMaximum 2 lines per bullet.\n\nMaximum 3 bullets per subsection (except quoted clauses).\n\nAvoid long paragraphs.\n\nAvoid repetition.\n\nAvoid internal commentary.\n\nAvoid technical explanations.\n\nAvoid speculative language.\n\nAvoid parentheses unless quoting a clause.\n\nAvoid commentary such as “market estimate”.\n\nKeep total report under 900 words.\n\n🧾 OUTPUT DELIVERY MODE\n\nThe report must:\n\nBe structured and clean.\n\nUse bullet formatting.\n\nBe suitable for direct email body.\n\nBe suitable for PDF generation.\n\nMaintain executive tone.\n\nAvoid casual or conversational language.\n\nContain no markdown artifacts or code formatting.\n\n🚫 STRICT PROHIBITIONS\n\nNo greetings.\nNo marketing language.\nNo speculation.\nNo assumptions.\nNo fabricated values.\nNo partial completion.\nNo explanation of system behavior.\n\nReturn ONLY the final report.\n\n",
+          "maxIterations": 12
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -656,
+        1152
+      ],
+      "id": "025bc138-e685-4003-9b2c-69de1da6a31e",
+      "name": "AI Agent1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -752,
+        1456
+      ],
+      "id": "648f8473-ce01-451b-8da4-5cdd53b9660d",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "tvb7CZBXyiudkerw",
+          "name": "OpenAi account 15"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -2032,
+        1296
+      ],
+      "id": "3581bb3b-44e9-4789-909f-9606e473b026",
+      "name": "Merge",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Code in JavaScript').first().json;\n\nreturn [{\n  json: {\n    email:              d.email              ?? null,\n    height:             d.height             ?? null,\n    weight:             d.weight             ?? null,\n    planned_procedure:  d.planned_procedure  ?? null,\n    city:               d.city               ?? null,\n    hospital_name:      d.hospital_name      ?? null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        1168
+      ],
+      "id": "5a17889b-b65e-4e75-862d-08376b2d757a",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Search for official claim process or claim document requirements \nfor a specific insurance provider.\n\nRequired Input:\n- search_query (string)\n\nReturns:\n- Search results including links and snippets.",
+        "q": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Search_Query__q_', `Fully constructed search query for claim process or reimbursement requirements.`, 'string') }}",
+        "additionalFields": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-serpapi.serpApiTool",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        992
+      ],
+      "id": "2bc5d019-ea50-48bc-9aac-3d42096912f6",
+      "name": "claim_process_search",
+      "credentials": {
+        "serpApi": {
+          "id": "fo7zZdgSBAoYOB55",
+          "name": "SerpApi account 5"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Tool Name: network_hospital_lookup\n\nPurpose:\nCheck whether a hospital is listed as a network hospital for a specific insurance provider.\n\nInputs:\n- hospital_name (string, required)\n  The exact hospital name to check.\n\n- insurance_provider (string, required)\n  The normalized insurance provider brand name (without legal suffix such as \"Limited\", \"Company Limited\", etc.).\n\nBehavior:\nThe tool must search the connected Google Sheet and return rows where:\n\nInsurance Provider column equals insurance_provider\nAND\nHospital Name column equals hospital_name\n\nBoth matches must be exact.\n\nInterpretation Rules:\n- If at least one row is returned → Hospital is Network.\n- If zero rows are returned → Hospital is Non-Network.\n\nDo not perform partial matching.\nDo not modify input values.\nExpect exact string matching only.",
+        "documentId": {
+          "__rl": true,
+          "value": "1M8y8IDDW6RK4YHQFNvBTVXfrHZdoRaZuSzOT7Q-LaoM",
+          "mode": "list",
+          "cachedResultName": "Dhruv_Bama_hospital_copy",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M8y8IDDW6RK4YHQFNvBTVXfrHZdoRaZuSzOT7Q-LaoM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1M8y8IDDW6RK4YHQFNvBTVXfrHZdoRaZuSzOT7Q-LaoM/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Hospital Name",
+              "lookupValue": "={{ $json.hospital_name }}"
+            },
+            {
+              "lookupColumn": "Insurance Provider",
+              "lookupValue": "={{ $json.insurance_provider }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.7,
+      "position": [
+        -352,
+        880
+      ],
+      "id": "41b8b0dd-8f41-4f31-b9f5-fb1804be417d",
+      "name": "network_hospital_lookup",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMT4zqjSmrO2czg4",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "rtf",
+        "options": {
+          "fileName": "Surgical_Audit_Report.rtf"
+        }
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -160,
+        304
+      ],
+      "id": "1c517d9e-d60f-4830-b22e-6feacc55926c",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $json.output;\n\n// Clean unicode + remove duplicate AI title\nconst cleaned = text\n  .replace(/[^\\x00-\\x7F]/g, '')\n  .replace(/SURGICAL INSURANCE AUDIT REPORT/g, '')\n  .trim();\n\n// Build RTF structure\nconst rtfContent = `\n\\\\rtf1\\\\ansi\\\\deff0\n{\\\\fonttbl{\\\\f0 Arial;}}\n\\\\fs28\\\\b SURGICAL INSURANCE AUDIT REPORT \\\\b0\\\\par\n\\\\par\n\\\\fs24 ${cleaned.replace(/\\n/g, '\\\\par\\n')}\n`;\n\nreturn [\n  {\n    json: {\n      formatted: rtfContent\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        496
+      ],
+      "id": "27a67075-1f49-4162-8110-ed57f38a01ef",
+      "name": "format for report"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "Surgical Insurance Audit Report – Action Required",
+        "message": "=<div style=\"font-family: Arial, sans-serif; font-size: 14px; color: #333; line-height: 1.6;\">\n  \n  <h2 style=\"color:#1f4e79;\">Surgical Insurance Audit Completed</h2>\n\n  <p>Dear {{ $json.full_name || 'Valued Member' }},</p>\n\n  <p>\n    Your surgical insurance audit has been successfully completed based on the\n    submitted policy and treatment details.\n  </p>\n\n  <hr style=\"border:0; border-top:1px solid #ddd; margin:20px 0;\">\n\n  <h3 style=\"color:#1f4e79;\">Key Highlights</h3>\n  <ul>\n    <li>Procedure: {{ $json.planned_procedure }}</li>\n    <li>Hospital: {{ $json.hospital_name }}</li>\n    <li>City: {{ $json.city }}</li>\n  </ul>\n\n  <h3 style=\"color:#1f4e79;\">Next Recommended Actions</h3>\n  <ul>\n    <li>Verify waiting period applicability</li>\n    <li>Initiate pre-authorization before admission</li>\n    <li>Confirm network eligibility with hospital</li>\n  </ul>\n\n  <hr style=\"border:0; border-top:1px solid #ddd; margin:20px 0;\">\n\n  <p>\n    Please find your detailed audit report attached to this email.\n  </p>\n\n  <p>\n    If you require clarification or wish to proceed with claim support,\n    simply reply to this email.\n  </p>\n\n  <br>\n\n  <p>\n    Regards,<br>\n    <strong>Sentinel Surgical Audit System</strong>\n  </p>\n\n</div>",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {}
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        272
+      ],
+      "id": "3e4736c4-066b-4d79-b4cf-7e8b2c45342f",
+      "name": "Send a message",
+      "webhookId": "cc72dd70-ca6c-40cd-8c31-ec25fbf552c1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "em43kxxWeWbJ0Ofz",
+          "name": "Gmail account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "abfc4137-493b-4f72-bb22-ecb209875a26",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $('Code in JavaScript1').first().json.email;\nconst report = $json.output;\nreturn [{ json: { email, report, timestamp: new Date().toISOString() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-400, 1960],
+      "id": "c1a2b3c4-d5e6-7f89-a0b1-c2d3e4f5a6b7",
+      "name": "Prepare Audit Result"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1M8y8IDDW6RK4YHQFNvBTVXfrHZdoRaZuSzOT7Q-LaoM",
+          "mode": "list",
+          "cachedResultName": "Dhruv_Bama_hospital_copy"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "audit_results",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": []
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-200, 1960],
+      "id": "d2e3f4a5-b6c7-8d90-b1c2-d3e4f5a6b7c8",
+      "name": "Save Report to Sheets",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMT4zqjSmrO2czg4",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, report: $json.report }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -992,
+        1808
+      ],
+      "id": "b67bb9f0-6c51-434b-be16-8c8fee06adf3",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Embeddings OpenAI1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "legal_rights_lookup",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "legal_rights_lookup": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cost_estimatory": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "bmi_calculator": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "thesaurus_lookup": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "risk_estimator": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "user_policy_reader": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI2": {
+      "ai_embedding": [
+        [
+          {
+            "node": "user_policy_reader",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File2": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI3": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader1": {
+      "ai_document": [
+        [
+          {
+            "node": "Pinecone Vector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter1": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader1",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sentinel: AI Surgical Audit Portal": {
+      "main": [
+        [
+          {
+            "node": "Extract from File2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Vector Store": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "format for report",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Audit Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Audit Result": {
+      "main": [
+        [
+          {
+            "node": "Save Report to Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "claim_process_search": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "network_hospital_lookup": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "format for report": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "c7a5610c-311b-40ed-83cd-c23f8e2b4766",
+  "meta": {
+    "instanceId": "a32d89787d58cd8d475f4335b9d1d24ae757aa2351b55ba80263559a26d738c2"
+  },
+  "id": "nL9LLBdIrmRPSkzZ",
+  "tags": []
+}

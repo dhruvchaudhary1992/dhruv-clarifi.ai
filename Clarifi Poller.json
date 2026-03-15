@@ -1,0 +1,132 @@
+{
+  "name": "Clarifi Result Poller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "sentinel-result",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-400, 400],
+      "id": "aa11bb22-cc33-dd44-ee55-ff6677889900",
+      "name": "Sentinel Result Webhook",
+      "webhookId": "a1b2c3d4-e5f6-7890-abcd-ef1234567891"
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1M8y8IDDW6RK4YHQFNvBTVXfrHZdoRaZuSzOT7Q-LaoM",
+          "mode": "list",
+          "cachedResultName": "Dhruv_Bama_hospital_copy"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "audit_results",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "email",
+              "lookupValue": "={{ $json.query.email }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [-160, 400],
+      "id": "bb22cc33-dd44-ee55-ff66-aa7788990011",
+      "name": "Read Audit Result",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "fMT4zqjSmrO2czg4",
+          "name": "Google Sheets account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst validItems = items.filter(item => item.json && item.json.report && String(item.json.report).trim().length > 0);\nif (validItems.length === 0) {\n  return [{ json: { status: 'pending' } }];\n}\nconst latest = validItems[validItems.length - 1];\nreturn [{ json: { status: 'done', report: latest.json.report } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [80, 400],
+      "id": "cc33dd44-ee55-ff66-aa77-bb8899001122",
+      "name": "Check Result"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [320, 400],
+      "id": "dd44ee55-ff66-aa77-bb88-cc9900112233",
+      "name": "Respond with Result"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Sentinel Result Webhook": {
+      "main": [
+        [
+          {
+            "node": "Read Audit Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Audit Result": {
+      "main": [
+        [
+          {
+            "node": "Check Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Result": {
+      "main": [
+        [
+          {
+            "node": "Respond with Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "a32d89787d58cd8d475f4335b9d1d24ae757aa2351b55ba80263559a26d738c2"
+  },
+  "tags": []
+}
