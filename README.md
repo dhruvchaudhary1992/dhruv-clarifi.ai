@@ -1,5 +1,7 @@
 # Clarifi — Surgical Insurance Auditor
 
+**Live:** [https://clarifi-frontend.vercel.app](https://clarifi-frontend.vercel.app)
+
 > AI-powered health insurance audit platform for India. Upload your policy PDF, enter your surgery details, and get a full structured audit report in under 60 seconds — delivered on-screen and by email.
 
 ---
