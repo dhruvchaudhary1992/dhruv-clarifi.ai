@@ -454,23 +454,56 @@
     },
     {
       "parameters": {
-        "operation": "rtf",
+        "method": "POST",
+        "url": "https://api.pdfshift.io/v3/convert/chromium",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Basic {{ Buffer.from($vars.PDFSHIFT_KEY + ':').toString('base64') }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "source",
+              "value": "={{ $json.html }}"
+            },
+            {
+              "name": "filename",
+              "value": "Clarifi_Audit_Report.pdf"
+            },
+            {
+              "name": "sandbox",
+              "value": "={{ false }}"
+            }
+          ]
+        },
         "options": {
-          "fileName": "Surgical_Audit_Report.rtf"
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
         }
       },
-      "type": "n8n-nodes-base.convertToFile",
-      "typeVersion": 1.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         -160,
         304
       ],
       "id": "1c517d9e-d60f-4830-b22e-6feacc55926c",
-      "name": "Convert to File"
+      "name": "Generate PDF"
     },
     {
       "parameters": {
-        "jsCode": "const text = $json.output;\n\n// Clean unicode + remove duplicate AI title\nconst cleaned = text\n  .replace(/[^\\x00-\\x7F]/g, '')\n  .replace(/SURGICAL INSURANCE AUDIT REPORT/g, '')\n  .trim();\n\n// Build RTF structure\nconst rtfContent = `\n\\\\rtf1\\\\ansi\\\\deff0\n{\\\\fonttbl{\\\\f0 Arial;}}\n\\\\fs28\\\\b SURGICAL INSURANCE AUDIT REPORT \\\\b0\\\\par\n\\\\par\n\\\\fs24 ${cleaned.replace(/\\n/g, '\\\\par\\n')}\n`;\n\nreturn [\n  {\n    json: {\n      formatted: rtfContent\n    }\n  }\n];"
+        "jsCode": "const text = $json.output;\nconst d = $('Code in JavaScript').first().json;\n\nconst name = (d.full_name || '').trim() || d.email || 'Valued Member';\nconst date = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });\n\nfunction esc(s) {\n  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n}\n\nfunction textToHtml(raw) {\n  if (!raw) return '';\n  const lines = raw.split('\\n');\n  let out = '';\n  let inList = false;\n  for (const line of lines) {\n    const t = line.trim();\n    if (!t) { if (inList) { out += '</ul>'; inList = false; } continue; }\n    const isBullet = /^[-\\u2022*]\\s/.test(t) || /^\\d+[.)]\\s/.test(t);\n    if (isBullet) {\n      if (!inList) { out += \"<ul style='padding-left:18px;margin:6px 0;'>\"; inList = true; }\n      const content = t.replace(/^[-\\u2022*]\\s+/, '').replace(/^\\d+[.)]\\s+/, '');\n      out += \"<li style='margin:4px 0;color:#475569;'>\" + esc(content) + '</li>';\n    } else {\n      if (inList) { out += '</ul>'; inList = false; }\n      const ci = t.indexOf(':');\n      if (ci > 0 && ci < 40 && ci < t.length - 1) {\n        const key = t.slice(0, ci).trim();\n        const val = t.slice(ci + 1).trim();\n        out += \"<div style='margin:6px 0;'><span style='font-weight:bold;color:#1e293b;'>\" + esc(key) + \":</span> <span style='color:#475569;'>\" + esc(val) + '</span></div>';\n      } else {\n        out += \"<p style='margin:6px 0;color:#475569;'>\" + esc(t) + '</p>';\n      }\n    }\n  }\n  if (inList) out += '</ul>';\n  return out;\n}\n\nconst titles = ['Policy Overview','Hospital Network Status','Estimated Cost','Clinical Risk Assessment','Claim Process Guidance','Regulatory Safeguards','Recommended Next Steps'];\nconst colors = ['#1e40af','#065f46','#92400e','#7f1d1d','#1e3a8a','#4c1d95','#14532d'];\nconst lights = ['#eff6ff','#ecfdf5','#fffbeb','#fef2f2','#eff6ff','#f5f3ff','#f0fdf4'];\n\nfunction parseSection(raw, idx) {\n  const title = titles[idx];\n  const start = raw.indexOf(title);\n  if (start === -1) return null;\n  const nl = raw.indexOf('\\n', start);\n  if (nl === -1) return '';\n  let end = raw.length;\n  for (let j = idx + 1; j < titles.length; j++) {\n    const ni = raw.indexOf(titles[j], nl);\n    if (ni !== -1 && ni < end) end = ni;\n  }\n  return raw.slice(nl + 1, end).trim();\n}\n\nconst cards = titles.map(function(title, i) {\n  const content = parseSection(text, i);\n  if (content === null) return '';\n  return \"<div style='background:white;border-radius:10px;margin-bottom:18px;border-left:5px solid \" + colors[i] + \";box-shadow:0 1px 4px rgba(0,0,0,0.08);overflow:hidden;'>\"\n    + \"<div style='background:\" + lights[i] + \";padding:10px 20px;border-bottom:1px solid #e2e8f0;'>\"\n    + \"<span style='font-size:10px;font-weight:bold;color:\" + colors[i] + \";letter-spacing:2px;text-transform:uppercase;margin-right:10px;'>SECTION \" + (i+1) + \"</span>\"\n    + \"<span style='font-size:13px;font-weight:bold;color:\" + colors[i] + \";'>\" + title + \"</span></div>\"\n    + \"<div style='padding:14px 20px;font-size:12px;line-height:1.8;'>\" + textToHtml(content) + \"</div></div>\";\n}).join('');\n\nconst metaParts = [];\nif (d.planned_procedure) metaParts.push(\"<div style='background:rgba(255,255,255,0.18);border-radius:8px;padding:8px 14px;'><div style='font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;'>Procedure</div><div style='font-size:12px;font-weight:bold;margin-top:2px;'>\" + esc(d.planned_procedure) + \"</div></div>\");\nif (d.hospital_name)       metaParts.push(\"<div style='background:rgba(255,255,255,0.18);border-radius:8px;padding:8px 14px;'><div style='font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;'>Hospital</div><div style='font-size:12px;font-weight:bold;margin-top:2px;'>\"   + esc(d.hospital_name)       + \"</div></div>\");\nconst meta = metaParts.join('');\n\nconst html = \"<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'><title>Surgical Insurance Audit Report</title>\"\n  + \"<style>*{margin:0;padding:0;box-sizing:border-box;}body{font-family:Arial,Helvetica,sans-serif;background:#f1f5f9;}</style></head><body>\"\n  + \"<div style='background:linear-gradient(135deg,#1e3a8a 0%,#2563eb 100%);color:white;padding:36px 48px 28px;'>\"\n  + \"<div style='font-size:11px;font-weight:bold;letter-spacing:3px;text-transform:uppercase;opacity:0.75;margin-bottom:8px;'>CLARIFI \\u00b7 Sentinel AI Audit System</div>\"\n  + \"<div style='font-size:24px;font-weight:bold;'>Surgical Insurance Audit Report</div>\"\n  + \"<div style='font-size:11px;opacity:0.7;margin-top:6px;'>AI-generated analysis based on submitted policy and procedure details</div>\"\n  + \"<div style='display:flex;gap:12px;margin-top:18px;flex-wrap:wrap;'>\"\n  + \"<div style='background:rgba(255,255,255,0.18);border-radius:8px;padding:8px 14px;'><div style='font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;'>Prepared For</div><div style='font-size:12px;font-weight:bold;margin-top:2px;'>\" + esc(name) + \"</div></div>\"\n  + \"<div style='background:rgba(255,255,255,0.18);border-radius:8px;padding:8px 14px;'><div style='font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:1px;'>Date</div><div style='font-size:12px;font-weight:bold;margin-top:2px;'>\" + esc(date) + \"</div></div>\"\n  + meta + \"</div></div>\"\n  + \"<div style='padding:28px 48px;'>\" + cards + \"</div>\"\n  + \"<div style='background:white;border-top:1px solid #e2e8f0;padding:18px 48px;text-align:center;font-size:11px;color:#94a3b8;'>\"\n  + \"<div style='font-weight:bold;color:#64748b;margin-bottom:3px;'>Clarifi \\u00b7 Sentinel Insurance Auditor</div>\"\n  + \"<div style='font-style:italic;'>This report is for informational purposes only. All costs in INR (\\u20b9). Regulatory: IRDAI 2024.</div>\"\n  + \"</div></body></html>\";\n\nreturn [{ json: { html, email: d.email, full_name: name } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -531,7 +564,10 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-400, 1960],
+      "position": [
+        -400,
+        1960
+      ],
       "id": "c1a2b3c4-d5e6-7f89-a0b1-c2d3e4f5a6b7",
       "name": "Prepare Audit Result"
     },
@@ -559,7 +595,10 @@
       },
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.5,
-      "position": [-200, 1960],
+      "position": [
+        -200,
+        1960
+      ],
       "id": "d2e3f4a5-b6c7-8d90-b1c2-d3e4f5a6b7c8",
       "name": "Save Report to Sheets",
       "credentials": {
@@ -855,20 +894,9 @@
       "main": [
         [
           {
-            "node": "Convert to File",
+            "node": "Generate PDF",
             "type": "main",
             "index": 0
-          }
-        ]
-      ]
-    },
-    "Convert to File": {
-      "main": [
-        [
-          {
-            "node": "Merge1",
-            "type": "main",
-            "index": 1
           }
         ]
       ]
@@ -880,6 +908,17 @@
             "node": "Send a message",
             "type": "main",
             "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate PDF": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
           }
         ]
       ]
