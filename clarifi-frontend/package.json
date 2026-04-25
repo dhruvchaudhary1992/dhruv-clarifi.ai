@@ -11,7 +11,10 @@
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "lucide-react": "^0.441.0"
+    "lucide-react": "^0.441.0",
+    "openai": "^4.67.0",
+    "nodemailer": "^6.9.15",
+    "pdfjs-dist": "^4.6.82"
   },
   "devDependencies": {
     "@types/react": "^18.3.5",

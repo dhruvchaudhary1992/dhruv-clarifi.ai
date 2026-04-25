@@ -1,34 +1,34 @@
-const WEBHOOK_URL = import.meta.env.VITE_WEBHOOK_URL
+import { extractPdfText } from '../utils/extractPdfText'
 
-/**
- * Submits the audit form to the n8n webhook and waits for the full report.
- * n8n's "Respond to Webhook" node fires at the end of the pipeline (~2-3 min),
- * returning { success: true, report: "..." }.
- */
 export async function submitAudit(formState) {
-  const fd = new FormData()
-  fd.append('full_name', formState.fullName || '')
-  fd.append('email', formState.email)
-  fd.append('city', formState.city)
-  fd.append('weight', String(formState.weight))
-  fd.append('height', String(formState.height))
-  fd.append('planned_procedure', formState.procedure || '')
-  fd.append('hospital_name', formState.hospital || '')
-  // Binary field name MUST be Policy_Document — n8n Extract from File2 reads this
-  fd.append('Policy_Document', formState.pdfFile)
+  // Extract PDF text in the browser (avoids Vercel 4.5MB body limit)
+  let policy_text = ''
+  if (formState.pdfFile) {
+    policy_text = await extractPdfText(formState.pdfFile)
+  }
 
-  // 10-minute timeout — n8n holds the connection open until Respond to Webhook fires.
-  // Pipeline (PDF ingest + AI agent + email) can take 4-7 min on complex policies.
+  const payload = {
+    email: formState.email,
+    full_name: formState.fullName || '',
+    city: formState.city || '',
+    weight: String(formState.weight || ''),
+    height: String(formState.height || ''),
+    planned_procedure: formState.procedure || '',
+    hospital_name: formState.hospital || '',
+    policy_text,
+  }
+
+  // 90-second timeout — Vercel function finishes in 30-40s
   const controller = new AbortController()
-  const tid = setTimeout(() => controller.abort(), 10 * 60 * 1000)
+  const tid = setTimeout(() => controller.abort(), 90_000)
 
   let res
   try {
-    res = await fetch(WEBHOOK_URL, {
+    res = await fetch('/api/audit', {
       method: 'POST',
-      body: fd,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
       signal: controller.signal,
-      // Do NOT set Content-Type — browser sets multipart boundary automatically
     })
   } finally {
     clearTimeout(tid)
@@ -36,13 +36,13 @@ export async function submitAudit(formState) {
 
   if (!res.ok) {
     const text = await res.text().catch(() => '')
-    throw new Error(`Audit request failed (${res.status})${text ? ': ' + text : ''}`)
+    let msg = `Audit request failed (${res.status})`
+    try {
+      const j = JSON.parse(text)
+      if (j.error) msg = j.error
+    } catch {}
+    throw new Error(msg)
   }
 
-  const text = await res.text()
-  if (!text || !text.trim()) {
-    throw new Error('n8n returned an empty response. Make sure the v7 workflow is imported and active.')
-  }
-
-  return JSON.parse(text)
+  return res.json()
 }

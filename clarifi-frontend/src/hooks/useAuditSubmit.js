@@ -2,16 +2,14 @@ import { useState } from 'react'
 import { submitAudit } from '../api/clarifi'
 import { parseReport } from '../utils/parseReport'
 
-// Phase labels shown during loading
 const PHASES = [
-  'Uploading policy document\u2026',
-  'Ingesting policy into knowledge base\u2026',
-  'Running AI audit \u2014 this can take 3\u20136 minutes\u2026',
-  'Generating your report\u2026',
+  'Extracting text from your policy PDF…',
+  'Analysing policy coverage and benefits…',
+  'Running AI audit — this takes about 20–40 seconds…',
+  'Generating your report…',
 ]
 
-// How long to stay on each phase before advancing (ms)
-const PHASE_DURATIONS = [8_000, 20_000, 300_000, Infinity]
+const PHASE_DURATIONS = [4_000, 8_000, 25_000, Infinity]
 
 export function useAuditSubmit() {
   const [status, setStatus] = useState('idle')   // idle | loading | done | error | background
@@ -25,7 +23,6 @@ export function useAuditSubmit() {
     setReport(null)
     setErrorMsg('')
 
-    // Schedule phase advances based on per-phase durations
     const timers = []
     let elapsed = 0
     for (let i = 1; i < PHASES.length; i++) {
@@ -37,16 +34,14 @@ export function useAuditSubmit() {
     const clearTimers = () => timers.forEach(clearTimeout)
 
     try {
-      // POST form and wait — n8n holds the connection open until the full report is ready
       const data = await submitAudit(formState)
 
       clearTimers()
       setPhase(PHASES.length - 1)
 
-      // n8n returns { success: true, report: "..." }
       const rawReport = data.report || data.output || ''
       if (!rawReport) {
-        throw new Error('Report was empty. Check n8n Respond to Webhook output.')
+        throw new Error('Report was empty. Please try again.')
       }
 
       const parsed = parseReport(rawReport)
@@ -55,7 +50,6 @@ export function useAuditSubmit() {
 
     } catch (err) {
       clearTimers()
-      // AbortError = our 10-min timeout fired — workflow still running, email will arrive
       if (err.name === 'AbortError' || err.message === 'Failed to fetch') {
         setStatus('background')
       } else {
