@@ -17,9 +17,10 @@ export async function submitAudit(formState) {
   // Binary field name MUST be Policy_Document — n8n Extract from File2 reads this
   fd.append('Policy_Document', formState.pdfFile)
 
-  // 4-minute timeout — n8n holds the connection open until Respond to Webhook fires
+  // 10-minute timeout — n8n holds the connection open until Respond to Webhook fires.
+  // Pipeline (PDF ingest + AI agent + email) can take 4-7 min on complex policies.
   const controller = new AbortController()
-  const tid = setTimeout(() => controller.abort(), 4 * 60 * 1000)
+  const tid = setTimeout(() => controller.abort(), 10 * 60 * 1000)
 
   let res
   try {

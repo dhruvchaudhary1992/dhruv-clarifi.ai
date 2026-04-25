@@ -2,12 +2,16 @@ import { useState } from 'react'
 import { submitAudit } from '../api/clarifi'
 import { parseReport } from '../utils/parseReport'
 
+// Phase labels shown during loading
 const PHASES = [
   'Uploading policy document\u2026',
   'Ingesting policy into knowledge base\u2026',
-  'Running AI audit \u2014 this typically takes 2\u20133 minutes\u2026',
+  'Running AI audit \u2014 this can take 3\u20136 minutes\u2026',
   'Generating your report\u2026',
 ]
+
+// How long to stay on each phase before advancing (ms)
+const PHASE_DURATIONS = [8_000, 20_000, 300_000, Infinity]
 
 export function useAuditSubmit() {
   const [status, setStatus] = useState('idle')   // idle | loading | done | error | background
@@ -21,16 +25,22 @@ export function useAuditSubmit() {
     setReport(null)
     setErrorMsg('')
 
-    // Advance phases at ~45s intervals while n8n processes
-    const phaseInterval = setInterval(() => {
-      setPhase(p => (p < PHASES.length - 1 ? p + 1 : p))
-    }, 45_000)
+    // Schedule phase advances based on per-phase durations
+    const timers = []
+    let elapsed = 0
+    for (let i = 1; i < PHASES.length; i++) {
+      elapsed += PHASE_DURATIONS[i - 1]
+      if (PHASE_DURATIONS[i - 1] === Infinity) break
+      const idx = i
+      timers.push(setTimeout(() => setPhase(idx), elapsed))
+    }
+    const clearTimers = () => timers.forEach(clearTimeout)
 
     try {
       // POST form and wait — n8n holds the connection open until the full report is ready
       const data = await submitAudit(formState)
 
-      clearInterval(phaseInterval)
+      clearTimers()
       setPhase(PHASES.length - 1)
 
       // n8n returns { success: true, report: "..." }
@@ -44,8 +54,8 @@ export function useAuditSubmit() {
       setStatus('done')
 
     } catch (err) {
-      clearInterval(phaseInterval)
-      // AbortError = our 4-min timeout fired — workflow still running, email will arrive
+      clearTimers()
+      // AbortError = our 10-min timeout fired — workflow still running, email will arrive
       if (err.name === 'AbortError' || err.message === 'Failed to fetch') {
         setStatus('background')
       } else {
